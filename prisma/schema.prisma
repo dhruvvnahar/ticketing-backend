@@ -1,0 +1,45 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Creator {
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  razorpayAccountId  String   
+  events             Event[]
+  createdAt          DateTime @default(now())
+}
+
+model Event {
+  id            String   @id @default(uuid())
+  title         String
+  description   String
+  ticketPrice   Float    
+  totalSeats    Int
+  creatorId     String
+  creator       Creator  @relation(fields: [creatorId], references: [id])
+  tickets       Ticket[]
+  date          DateTime
+  createdAt     DateTime @default(now())
+}
+
+model Ticket {
+  id            String   @id @default(uuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id])
+  buyerName     String
+  buyerEmail    String
+  buyerPhone    String
+  status        String   @default("pending") 
+  razorpayOrder String?  
+  isScanned     Boolean  @default(false)
+  purchasedAt   DateTime @default(now())
+}
