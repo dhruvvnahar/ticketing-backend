@@ -104,7 +104,7 @@ def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticke
 
     msg = EmailMessage()
     msg['Subject'] = f"Your Ticket for {event_title}"
-    msg['From'] = "YOUR_GMAIL_ADDRESS@gmail.com" 
+    msg['From'] = "dhruvnahar25@gmail.com" 
     msg['To'] = buyer_email
     
     msg.set_content(
@@ -117,7 +117,10 @@ def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticke
     msg.add_attachment(qr_bytes, maintype='image', subtype='png', filename='ticket_qr.png')
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        # Port 587 with STARTTLS fixes the Errno 101 unreachable error on cloud platforms
+        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
             smtp.login("dhruvnahar25@gmail.com", "cjju kkea pzbr emef") 
             smtp.send_message(msg)
         print(f"Email successfully sent to {buyer_email}")
