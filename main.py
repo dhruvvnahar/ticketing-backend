@@ -72,21 +72,31 @@ async def seed_database():
 
 @app.get("/api/events/{event_id}/tickets")
 async def get_event_tickets(event_id: str):
-    # Fetch tickets and include related event data if needed
-    tickets = await prisma.ticket.find_many(
-        where={"eventId": event_id},
-        order_by={"createdAt": "desc"}
-    )
+    try:
+        # Removed the order_by clause temporarily in case 'createdAt' was causing the crash
+        tickets = await prisma.ticket.find_many(
+            where={"eventId": event_id}
+        )
+        
+        # Safely convert Prisma objects to standard dictionaries
+        ticket_list = []
+        for t in tickets:
+            t_dict = t.dict() if hasattr(t, 'dict') else t.__dict__
+            ticket_list.append(t_dict)
+            
+        return {
+            "totalTickets": len(ticket_list),
+            "checkedInCount": sum(1 for t in ticket_list if t.get("status") == "checked-in"),
+            "tickets": ticket_list
+        }
+    except Exception as e:
+        # If it crashes, return the exact error message to the browser screen!
+        import traceback
+        return {
+            "error_message": str(e), 
+            "traceback": traceback.format_exc()
+        }
     
-    total_tickets = len(tickets)
-    checked_in_count = sum(1 for t in tickets if t.status == "checked-in")
-    
-    return {
-        "totalTickets": total_tickets,
-        "checkedInCount": checked_in_count,
-        "tickets": tickets
-    }
-
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(request: OrderRequest):
     event = await prisma.event.find_unique(where={"id": request.event_id})
