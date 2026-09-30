@@ -101,7 +101,7 @@ async def create_ticket_order(request: OrderRequest):
 
 def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticket_id: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
-    qr.add_data(ticket_id)
+    qr.add_data(f"https://ticketing-frontend-plum.vercel.app/verify/{ticket_id}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     
@@ -169,7 +169,7 @@ async def get_ticket(ticket_id: str):
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
-    qr.add_data(ticket.id)
+    qr.add_data(f"https://ticketing-frontend-plum.vercel.app/verify/{ticket.id}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     
@@ -186,3 +186,33 @@ async def get_ticket(ticket_id: str):
         "qr_code_image": f"data:image/png;base64,{qr_base64}"
     }
 
+@app.post("/api/tickets/{ticket_id}/check-in")
+async def check_in_ticket(ticket_id: str):
+    # Fetch the ticket and its associated event details
+    ticket = await prisma.ticket.find_unique(
+        where={"id": ticket_id},
+        include={"event": True}
+    )
+    
+    if not ticket:
+        return {"success": False, "status": "invalid", "message": "Ticket not found."}
+        
+    if ticket.status == "checked-in":
+        return {"success": False, "status": "used", "message": "Ticket Already Scanned!", "buyerName": ticket.buyerName}
+        
+    if ticket.status != "paid":
+        return {"success": False, "status": "unpaid", "message": "Ticket is not paid."}
+        
+    # Mark the ticket as consumed
+    await prisma.ticket.update(
+        where={"id": ticket_id},
+        data={"status": "checked-in"}
+    )
+    
+    return {
+        "success": True, 
+        "status": "valid", 
+        "message": "Access Granted", 
+        "buyerName": ticket.buyerName, 
+        "eventTitle": ticket.event.title
+    }
