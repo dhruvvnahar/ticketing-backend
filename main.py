@@ -106,6 +106,7 @@ async def create_ticket_order(request: OrderRequest):
 
 def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticket_id: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    # Make sure it includes /verify/ and the ticket_id
     qr.add_data(f"https://ticketing-frontend-plum.vercel.app/verify/{ticket_id}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -117,7 +118,7 @@ def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticke
     try:
         response = resend.Emails.send({
             "from": "onboarding@resend.dev", 
-            "to": buyer_email, # Must be the email you used to sign up for Resend
+            "to": buyer_email, 
             "subject": f"Your Ticket for {event_title}",
             "html": f"<p>Hi {buyer_name},</p><p>Your payment was successful! Attached is your QR code entry pass for <strong>{event_title}</strong>.</p><p>Please show this QR code at the entrance.</p><p>Ticket ID: {ticket_id}</p>",
             "attachments": [
@@ -174,6 +175,7 @@ async def get_ticket(ticket_id: str):
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    # Make sure it includes /verify/ and ticket.id here as well
     qr.add_data(f"https://ticketing-frontend-plum.vercel.app/verify/{ticket.id}")
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
