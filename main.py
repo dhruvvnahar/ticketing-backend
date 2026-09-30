@@ -70,10 +70,22 @@ async def seed_database():
     
     return {"message": "Dummy event created successfully", "event_id": event.id}
 
-@app.get("/api/events")
-async def get_all_events():
-    events = await prisma.event.find_many()
-    return events
+@app.get("/api/events/{event_id}/tickets")
+async def get_event_tickets(event_id: str):
+    # Fetch tickets and include related event data if needed
+    tickets = await prisma.ticket.find_many(
+        where={"eventId": event_id},
+        order_by={"createdAt": "desc"}
+    )
+    
+    total_tickets = len(tickets)
+    checked_in_count = sum(1 for t in tickets if t.status == "checked-in")
+    
+    return {
+        "totalTickets": total_tickets,
+        "checkedInCount": checked_in_count,
+        "tickets": tickets
+    }
 
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(request: OrderRequest):
@@ -223,3 +235,4 @@ async def check_in_ticket(ticket_id: str):
         "buyerName": ticket.buyerName, 
         "eventTitle": ticket.event.title
     }
+
