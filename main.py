@@ -1,3 +1,5 @@
+import resend
+import os
 import uuid
 import smtplib
 import qrcode
@@ -102,30 +104,22 @@ def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticke
     img.save(buffered, format="PNG")
     qr_bytes = buffered.getvalue()
 
-    msg = EmailMessage()
-    msg['Subject'] = f"Your Ticket for {event_title}"
-    msg['From'] = "dhruvnahar25@gmail.com" 
-    msg['To'] = buyer_email
-    
-    msg.set_content(
-        f"Hi {buyer_name},\n\n"
-        f"Your payment was successful! Attached is your QR code entry pass for {event_title}.\n\n"
-        f"Please show this QR code at the entrance.\n\n"
-        f"Ticket ID: {ticket_id}"
-    )
-
-    msg.add_attachment(qr_bytes, maintype='image', subtype='png', filename='ticket_qr.png')
-
     try:
-        # Port 587 with STARTTLS fixes the Errno 101 unreachable error on cloud platforms
-        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.login("dhruvnahar25@gmail.com", "cjju kkea pzbr emef") 
-            smtp.send_message(msg)
-        print(f"Email successfully sent to {buyer_email}")
+        response = resend.Emails.send({
+            "from": "onboarding@resend.dev", 
+            "to": buyer_email, # Must be the email you used to sign up for Resend
+            "subject": f"Your Ticket for {event_title}",
+            "html": f"<p>Hi {buyer_name},</p><p>Your payment was successful! Attached is your QR code entry pass for <strong>{event_title}</strong>.</p><p>Please show this QR code at the entrance.</p><p>Ticket ID: {ticket_id}</p>",
+            "attachments": [
+                {
+                    "filename": "ticket_qr.png",
+                    "content": list(qr_bytes) 
+                }
+            ]
+        })
+        print(f"SUCCESS: Email sent via Resend API! Response: {response}")
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        print(f"FAILED to send via Resend: {e}")
 
 @app.post("/api/webhook")
 async def simulated_webhook(request: Request):
