@@ -12,12 +12,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prisma import Prisma
 
-app = FastAPI()
 prisma = Prisma()
+app = FastAPI()
+origins = [
+    "http://localhost:3000",
+    "https://ticketing-frontend-plum.vercel.app" 
+]
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -180,3 +185,4 @@ async def get_ticket(ticket_id: str):
         "event_date": ticket.event.date.isoformat(),
         "qr_code_image": f"data:image/png;base64,{qr_base64}"
     }
+
