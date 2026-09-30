@@ -70,6 +70,11 @@ async def seed_database():
     
     return {"message": "Dummy event created successfully", "event_id": event.id}
 
+@app.get("/api/events")
+async def get_all_events():
+    events = await prisma.event.find_many()
+    return events
+
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(request: OrderRequest):
     event = await prisma.event.find_unique(where={"id": request.event_id})
