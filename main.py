@@ -13,6 +13,14 @@ from pydantic import BaseModel
 from prisma import Prisma
 from datetime import datetime, timedelta
 
+
+prisma = Prisma()
+app = FastAPI()
+origins = [
+    "http://localhost:3000",
+    "https://ticketing-frontend-plum.vercel.app" 
+]
+
 @app.get("/api/seed-creator")
 async def seed_creator():
     try:
@@ -52,14 +60,6 @@ async def seed_creator():
         import traceback
         print(traceback.format_exc())
         return {"error": str(e)}
-
-prisma = Prisma()
-app = FastAPI()
-origins = [
-    "http://localhost:3000",
-    "https://ticketing-frontend-plum.vercel.app" 
-]
-
 
 app.add_middleware(
     CORSMiddleware,
