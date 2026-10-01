@@ -11,6 +11,47 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prisma import Prisma
+from datetime import datetime, timedelta
+
+@app.get("/api/seed-creator")
+async def seed_creator():
+    try:
+        # Prevent crashing if the demo creator already exists
+        existing_creator = await prisma.creator.find_unique(where={"username": "demo-creator"})
+        if existing_creator:
+            return {"message": "Demo creator already exists!", "username": "demo-creator"}
+
+        # 1. Create a test creator profile
+        creator = await prisma.creator.create(
+            data={
+                "username": "demo-creator",
+                "name": "Alex Tech",
+                "bio": "Hosting the best software engineering meetups."
+            }
+        )
+
+        # 2. Create a test event linked to this creator
+        future_date = datetime.utcnow() + timedelta(days=30)
+        
+        await prisma.event.create(
+            data={
+                "title": "Full-Stack SaaS Masterclass",
+                "description": "Learn to build Next.js and FastAPI apps end-to-end.",
+                "ticketPrice": 999.0,
+                "totalSeats": 50,
+                "date": future_date,
+                "creatorId": creator.id
+            }
+        )
+
+        return {
+            "message": "Database successfully seeded!",
+            "username": creator.username
+        }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e)}
 
 prisma = Prisma()
 app = FastAPI()
