@@ -11,12 +11,12 @@ datasource db {
 }
 
 model Creator {
-  id                 String   @id @default(uuid())
-  name               String
-  email              String   @unique
-  razorpayAccountId  String   
-  events             Event[]
-  createdAt          DateTime @default(now())
+  id        String   @id @default(uuid())
+  username  String   @unique // This becomes the URL (e.g., 'alex-live')
+  name      String
+  bio       String?
+  events    Event[]
+  createdAt DateTime @default(now())
 }
 
 model Event {

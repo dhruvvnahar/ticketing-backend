@@ -207,6 +207,31 @@ async def get_ticket(ticket_id: str):
         "qr_code_image": f"data:image/png;base64,{qr_base64}"
     }
 
+@app.get("/api/creators/{username}")
+async def get_creator_profile(username: str):
+    try:
+        # Fetch creator and include their events in one query
+        creator = await prisma.creator.find_unique(
+            where={"username": username},
+            include={"events": True}
+        )
+        
+        if not creator:
+            return {"error": "Creator not found"}
+            
+        # Safely convert to dictionary
+        c_dict = creator.dict() if hasattr(creator, 'dict') else creator.__dict__
+        
+        # Safely convert nested events to dictionaries
+        if c_dict.get("events"):
+            c_dict["events"] = [e.dict() if hasattr(e, 'dict') else e.__dict__ for e in c_dict["events"]]
+            
+        return c_dict
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e)}
+
 @app.post("/api/tickets/{ticket_id}/check-in")
 async def check_in_ticket(ticket_id: str):
     # Fetch the ticket and its associated event details
