@@ -70,32 +70,24 @@ async def seed_database():
     
     return {"message": "Dummy event created successfully", "event_id": event.id}
 
-@app.get("/api/events/{event_id}/tickets")
-async def get_event_tickets(event_id: str):
+@app.get("/api/events")
+async def get_all_events():
     try:
-        # Removed the order_by clause temporarily in case 'createdAt' was causing the crash
-        tickets = await prisma.ticket.find_many(
-            where={"eventId": event_id}
-        )
+        events = await prisma.event.find_many()
         
         # Safely convert Prisma objects to standard dictionaries
-        ticket_list = []
-        for t in tickets:
-            t_dict = t.dict() if hasattr(t, 'dict') else t.__dict__
-            ticket_list.append(t_dict)
+        event_list = []
+        for e in events:
+            e_dict = e.dict() if hasattr(e, 'dict') else e.__dict__
+            event_list.append(e_dict)
             
-        return {
-            "totalTickets": len(ticket_list),
-            "checkedInCount": sum(1 for t in ticket_list if t.get("status") == "checked-in"),
-            "tickets": ticket_list
-        }
+        return event_list
     except Exception as e:
-        # If it crashes, return the exact error message to the browser screen!
         import traceback
-        return {
-            "error_message": str(e), 
-            "traceback": traceback.format_exc()
-        }
+        print(f"Error fetching events: {e}")
+        print(traceback.format_exc())
+        # Returning a 500 status or a dictionary will trigger the frontend error card cleanly
+        return {"error": str(e)}
     
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(request: OrderRequest):
