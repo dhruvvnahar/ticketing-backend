@@ -205,18 +205,34 @@ async def create_ticket_order(order_data: dict):
     if not event_id:
       raise HTTPException(status_code=400, detail="Event ID is required")
 
+    # Fetch event details first to get the event title for the email
+    event = await prisma.event.find_unique(where={"id": event_id})
+    event_title = event.title if event else "Event"
+
     ticket = await prisma.ticket.create(
         data={
             "buyerName": buyer_name,
             "buyerEmail": buyer_email,
             "buyerPhone": buyer_phone,
+            "status": "paid", # Mark as paid directly for testing
             "event": {"connect": {"id": event_id}},
         }
     )
+
+    # Trigger email directly here!
+    try:
+        send_ticket_email(
+            buyer_email=buyer_email,
+            buyer_name=buyer_name,
+            event_title=event_title,
+            ticket_id=ticket.id
+        )
+    except Exception as email_err:
+        print(f"Email failed: {email_err}")
+
     return {"success": True, "ticketId": ticket.id}
   except Exception as e:
     import traceback
-
     print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
   
