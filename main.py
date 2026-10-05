@@ -405,3 +405,12 @@ async def create_event(
     import traceback
     print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/events")
+async def get_events():
+  try:
+    events = await prisma.event.find_many(include={"creator": True})
+    return events
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))  
