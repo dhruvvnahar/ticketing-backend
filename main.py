@@ -195,34 +195,31 @@ async def upload_image(file: UploadFile = File(...)):
     )
 
 @app.post("/api/create-ticket-order")
-async def create_ticket_order(request: OrderRequest):
-    event = await prisma.event.find_unique(where={"id": request.event_id})
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-        
-    if event.totalSeats <= 0:
-        raise HTTPException(status_code=400, detail="Event is sold out")
+async def create_ticket_order(order_data: dict):
+  try:
+    buyer_name = order_data.get("buyerName") or order_data.get("buyer_name")
+    buyer_email = order_data.get("buyerEmail") or order_data.get("buyer_email")
+    buyer_phone = order_data.get("buyerPhone") or order_data.get("buyer_phone")
+    event_id = order_data.get("eventId") or order_data.get("event_id")
 
-    mock_order_id = f"mock_order_{uuid.uuid4().hex[:8]}"
+    if not event_id:
+      raise HTTPException(status_code=400, detail="Event ID is required")
 
     ticket = await prisma.ticket.create(
         data={
-            "eventId": event.id,
-            "buyerName": request.buyer_name,
-            "buyerEmail": request.buyer_email,
-            "buyerPhone": request.buyer_phone,
-            "status": "pending",
-            "razorpayOrder": mock_order_id
+            "buyerName": buyer_name,
+            "buyerEmail": buyer_email,
+            "buyerPhone": buyer_phone,
+            "event": {"connect": {"id": event_id}},
         }
     )
+    return {"success": True, "ticketId": ticket.id}
+  except Exception as e:
+    import traceback
 
-    return {
-        "orderId": mock_order_id,
-        "amount": event.ticketPrice + 10,
-        "ticketId": ticket.id,
-        "status": "Sandbox order created successfully"
-    }
-
+    print(traceback.format_exc())
+    raise HTTPException(status_code=500, detail=str(e))
+  
 def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticket_id: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     # Make sure it includes /verify/ and the ticket_id
