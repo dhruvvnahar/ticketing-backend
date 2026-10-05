@@ -389,19 +389,35 @@ async def check_in_ticket(ticket_id: str):
 @app.post("/api/events")
 async def create_event(
     title: str = Form(...),
-    description: str = Form(...),
+    description: str = Form(""),
     date: str = Form(...),
     price: float = Form(...),
     clerk_id: str = Form(...),
-    file: UploadFile = File(None)
+    file: UploadFile = File(None),
 ):
+  try:
     image_url = None
     if file:
-        contents = await file.read()
-        upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
-        image_url = upload_result.get("secure_url")
-        
-    # Your database creation logic using Prisma goes here...
-    # Make sure to save image_url to your database event record!
-    
-    return {"success": True, "imageUrl": image_url}
+      contents = await file.read()
+      upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
+      image_url = upload_result.get("secure_url")
+
+    # Save to your Prisma database with the correct creator relation mapping
+    event = await prisma.event.create(
+        data={
+            "title": title,
+            "description": description,
+            "date": date,
+            "price": float(price),
+            "imageUrl": image_url,
+            # Use whichever field name your Prisma schema uses for the creator relation:
+            "creatorId": clerk_id,  # If your schema uses a scalar creatorId field
+            # OR if your schema uses a relation connection block instead, uncomment below:
+            # "creator": {"connect": {"clerkId": clerk_id}},
+        }
+    )
+
+    return {"success": True, "event": event}
+  except Exception as e:
+    print(f"Error creating event: {str(e)}")
+    raise HTTPException(status_code=500, detail=str(e))
