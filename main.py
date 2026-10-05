@@ -3,7 +3,13 @@ import os
 import uuid
 import smtplib
 import qrcode
+import cloudinary
+import cloudinary.uploader
+import traceback
 import base64
+import shutil
+from fastapi import UploadFile, File, APIRouter
+from fastapi.staticfiles import StaticFiles
 from io import BytesIO
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
@@ -12,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prisma import Prisma
 from datetime import datetime, timedelta
+from typing import Optional
 
 
 prisma = Prisma()
@@ -20,6 +27,12 @@ origins = [
     "http://localhost:3000",
     "https://ticketing-frontend-plum.vercel.app" 
 ]
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+)
 
 @app.get("/api/seed-creator")
 async def seed_creator():
@@ -63,7 +76,7 @@ async def seed_creator():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Or specify ["http://localhost:3000"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +89,90 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     await prisma.disconnect()
+
+
+class CreatorSync(BaseModel):
+    clerk_id: str
+    email: str
+    name: str
+
+@app.post("/api/sync-creator")
+async def sync_creator(req: CreatorSync):
+    try:
+        # Check if the creator already exists by their Clerk ID
+        existing_creator = await prisma.creator.find_unique(
+            where={"clerkId": req.clerk_id}
+        )
+        
+        if existing_creator:
+            return {"message": "Creator already exists", "creator": existing_creator}
+            
+        # If they don't exist, create a new record in PostgreSQL
+        new_creator = await prisma.creator.create(
+            data={
+                "clerkId": req.clerk_id,
+                "email": req.email,
+                "name": req.name,
+            }
+        )
+        return {"message": "Creator synced successfully", "creator": new_creator}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class EventCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    date: str
+    price: float
+    image_url: Optional[str] = None
+    clerk_id: str
+    email: Optional[str] = "user@clerk.com"
+    name: Optional[str] = "Creator"
+    totalSeats: Optional[int] = 100  # <-- Add this default
+
+@app.post("/api/events")
+async def create_event(req: EventCreate):
+    try:
+        default_username = req.email.split("@")[0] if req.email else f"user_{req.clerk_id[:6]}"
+
+        creator = await prisma.creator.find_first(
+            where={"clerkId": req.clerk_id}
+        )
+        
+        if not creator:
+            creator = await prisma.creator.create(
+                data={
+                    "clerkId": req.clerk_id,
+                    "email": req.email or f"{req.clerk_id}@clerk.user",
+                    "name": req.name or "Creator",
+                    "username": default_username,
+                }
+            )
+        
+        event_datetime = datetime.fromisoformat(req.date)
+
+        new_event = await prisma.event.create(
+            data={
+                "title": req.title,
+                "description": req.description,
+                "date": event_datetime,
+                "price": float(req.price),
+                "totalSeats": 100,
+                "imageUrl": req.image_url,
+                "creator": {
+                    "connect": {"id": creator.id}
+                },
+            }
+        )
+        
+        return {"message": "Event published successfully!", "event": new_event}
+    except Exception as e:
+        print("\n" + "="*50)
+        print("ERROR IN /api/events:")
+        traceback.print_exc()
+        print("="*50 + "\n")
+        raise HTTPException(status_code=500, detail=str(e))
 
 class OrderRequest(BaseModel):
     event_id: str
@@ -111,25 +208,26 @@ async def seed_database():
     
     return {"message": "Dummy event created successfully", "event_id": event.id}
 
-@app.get("/api/events")
-async def get_all_events():
-    try:
-        events = await prisma.event.find_many()
-        
-        # Safely convert Prisma objects to standard dictionaries
-        event_list = []
-        for e in events:
-            e_dict = e.dict() if hasattr(e, 'dict') else e.__dict__
-            event_list.append(e_dict)
-            
-        return event_list
-    except Exception as e:
-        import traceback
-        print(f"Error fetching events: {e}")
-        print(traceback.format_exc())
-        # Returning a 500 status or a dictionary will trigger the frontend error card cleanly
-        return {"error": str(e)}
-    
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Mount this folder so FastAPI can serve images publicly
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+  try:
+    contents = await file.read()
+    upload_result = cloudinary.uploader.upload(
+        contents, folder="ticketing-saas"
+    )
+    secure_url = upload_result.get("secure_url")
+    return {"imageUrl": secure_url}
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Image upload failed: {str(e)}"
+    )
+
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(request: OrderRequest):
     event = await prisma.event.find_unique(where={"id": request.event_id})
@@ -266,9 +364,9 @@ async def get_creator_profile(username: str):
         import traceback
         print(traceback.format_exc())
         return {"error": str(e)}
+    
 @app.post("/api/tickets/{ticket_id}/check-in")
 async def check_in_ticket(ticket_id: str):
-    # Fetch the ticket and its associated event details
     ticket = await prisma.ticket.find_unique(
         where={"id": ticket_id},
         include={"event": True}
@@ -283,9 +381,9 @@ async def check_in_ticket(ticket_id: str):
     if ticket.status != "paid":
         return {"success": False, "status": "unpaid", "message": "Ticket is not paid."}
         
-    # Mark the ticket as consumed
+    # Correctly mark ticket as checked-in
     await prisma.ticket.update(
-        where={"id": ticket_id},
+        where={"id": ticket.id},
         data={"status": "checked-in"}
     )
     
@@ -297,3 +395,17 @@ async def check_in_ticket(ticket_id: str):
         "eventTitle": ticket.event.title
     }
 
+@app.get("/api/events")
+async def get_events(clerk_id: Optional[str] = None):
+    try:
+        if clerk_id:
+            creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+            if not creator:
+                return []
+            events = await prisma.event.find_many(where={"creatorId": creator.id})
+        else:
+            events = await prisma.event.find_many()
+        
+        return events
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

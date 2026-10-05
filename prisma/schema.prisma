@@ -1,46 +1,43 @@
-generator client {
-  provider             = "prisma-client-py"
-  interface            = "asyncio"
-  recursive_type_depth = 5
-  binaryTargets        = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
 model Creator {
   id        String   @id @default(uuid())
-  username  String   @unique // This becomes the URL (e.g., 'alex-live')
-  name      String
-  bio       String?
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  username  String?  // <-- This must be here
   events    Event[]
   createdAt DateTime @default(now())
 }
 
 model Event {
-  id            String   @id @default(uuid())
-  title         String
-  description   String
-  ticketPrice   Float    
-  totalSeats    Int
-  creatorId     String
-  creator       Creator  @relation(fields: [creatorId], references: [id])
-  tickets       Ticket[]
-  date          DateTime
-  createdAt     DateTime @default(now())
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  date        DateTime
+  price       Float    @map("ticketPrice")
+  totalSeats  Int      @default(100)
+  imageUrl    String?
+  creatorId   String
+  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  tickets     Ticket[]
+  createdAt   DateTime @default(now())
 }
 
+
 model Ticket {
-  id            String   @id @default(uuid())
-  eventId       String
-  event         Event    @relation(fields: [eventId], references: [id])
-  buyerName     String
-  buyerEmail    String
-  buyerPhone    String
-  status        String   @default("pending") 
-  razorpayOrder String?  
-  isScanned     Boolean  @default(false)
-  purchasedAt   DateTime @default(now())
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  buyerName   String
+  buyerEmail  String
+  createdAt   DateTime @default(now())
 }
