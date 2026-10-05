@@ -28,6 +28,14 @@ origins = [
     "https://ticketing-frontend-plum.vercel.app" 
 ]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or specify your Vercel domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
