@@ -132,47 +132,38 @@ class EventCreate(BaseModel):
     totalSeats: Optional[int] = 100  # <-- Add this default
 
 @app.post("/api/events")
-async def create_event(req: EventCreate):
-    try:
-        default_username = req.email.split("@")[0] if req.email else f"user_{req.clerk_id[:6]}"
+async def create_event(
+    title: str = Form(...),
+    description: str = Form(""),
+    date: str = Form(...),
+    price: float = Form(...),
+    clerk_id: str = Form(...),
+    file: UploadFile = File(None),
+):
+  try:
+    image_url = None
+    if file:
+      # Read the binary chunks of the uploaded file safely
+      contents = await file.read()
+      upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
+      image_url = upload_result.get("secure_url")
 
-        creator = await prisma.creator.find_first(
-            where={"clerkId": req.clerk_id}
-        )
-        
-        if not creator:
-            creator = await prisma.creator.create(
-                data={
-                    "clerkId": req.clerk_id,
-                    "email": req.email or f"{req.clerk_id}@clerk.user",
-                    "name": req.name or "Creator",
-                    "username": default_username,
-                }
-            )
-        
-        event_datetime = datetime.fromisoformat(req.date)
+    # Save to your Prisma database
+    event = await prisma.event.create(
+        data={
+            "title": title,
+            "description": description,
+            "date": date,
+            "price": price,
+            "clerkId": clerk_id,
+            "imageUrl": image_url,  # Saves the Cloudinary secure URL
+        }
+    )
 
-        new_event = await prisma.event.create(
-            data={
-                "title": req.title,
-                "description": req.description,
-                "date": event_datetime,
-                "price": float(req.price),
-                "totalSeats": 100,
-                "imageUrl": req.image_url,
-                "creator": {
-                    "connect": {"id": creator.id}
-                },
-            }
-        )
-        
-        return {"message": "Event published successfully!", "event": new_event}
-    except Exception as e:
-        print("\n" + "="*50)
-        print("ERROR IN /api/events:")
-        traceback.print_exc()
-        print("="*50 + "\n")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"success": True, "event": event}
+  except Exception as e:
+    print(f"Error creating event: {str(e)}")
+    raise HTTPException(status_code=500, detail=str(e))
 
 class OrderRequest(BaseModel):
     event_id: str
@@ -395,17 +386,22 @@ async def check_in_ticket(ticket_id: str):
         "eventTitle": ticket.event.title
     }
 
-@app.get("/api/events")
-async def get_events(clerk_id: Optional[str] = None):
-    try:
-        if clerk_id:
-            creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
-            if not creator:
-                return []
-            events = await prisma.event.find_many(where={"creatorId": creator.id})
-        else:
-            events = await prisma.event.find_many()
+@app.post("/api/events")
+async def create_event(
+    title: str = Form(...),
+    description: str = Form(...),
+    date: str = Form(...),
+    price: float = Form(...),
+    clerk_id: str = Form(...),
+    file: UploadFile = File(None)
+):
+    image_url = None
+    if file:
+        contents = await file.read()
+        upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
+        image_url = upload_result.get("secure_url")
         
-        return events
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Your database creation logic using Prisma goes here...
+    # Make sure to save image_url to your database event record!
+    
+    return {"success": True, "imageUrl": image_url}
