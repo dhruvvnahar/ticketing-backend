@@ -131,39 +131,6 @@ class EventCreate(BaseModel):
     name: Optional[str] = "Creator"
     totalSeats: Optional[int] = 100  # <-- Add this default
 
-@app.post("/api/events")
-async def create_event(
-    title: str = Form(...),
-    description: str = Form(""),
-    date: str = Form(...),
-    price: float = Form(...),
-    clerk_id: str = Form(...),
-    file: UploadFile = File(None),
-):
-  try:
-    image_url = None
-    if file:
-      # Read the binary chunks of the uploaded file safely
-      contents = await file.read()
-      upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
-      image_url = upload_result.get("secure_url")
-
-    # Save to your Prisma database
-    event = await prisma.event.create(
-        data={
-            "title": title,
-            "description": description,
-            "date": date,
-            "price": price,
-            "clerkId": clerk_id,
-            "imageUrl": image_url,  # Saves the Cloudinary secure URL
-        }
-    )
-
-    return {"success": True, "event": event}
-  except Exception as e:
-    print(f"Error creating event: {str(e)}")
-    raise HTTPException(status_code=500, detail=str(e))
 
 class OrderRequest(BaseModel):
     event_id: str
@@ -402,7 +369,18 @@ async def create_event(
       upload_result = cloudinary.uploader.upload(contents, folder="ticketing-saas")
       image_url = upload_result.get("secure_url")
 
-    # Save to your Prisma database with the correct creator relation mapping
+    # 1. Find or create the creator record first using clerkId
+    db_creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+    if not db_creator:
+      db_creator = await prisma.creator.create(
+          data={
+              "clerkId": clerk_id,
+              "email": f"{clerk_id}@clerk.user",
+              "name": "Creator",
+          }
+      )
+
+    # 2. Create the event using the creator's actual database table id
     event = await prisma.event.create(
         data={
             "title": title,
@@ -410,10 +388,7 @@ async def create_event(
             "date": date,
             "price": float(price),
             "imageUrl": image_url,
-            # Use whichever field name your Prisma schema uses for the creator relation:
-            "creatorId": clerk_id,  # If your schema uses a scalar creatorId field
-            # OR if your schema uses a relation connection block instead, uncomment below:
-            # "creator": {"connect": {"clerkId": clerk_id}},
+            "creatorId": db_creator.id,
         }
     )
 
