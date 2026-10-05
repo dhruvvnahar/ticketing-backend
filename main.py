@@ -380,12 +380,20 @@ async def create_event(
           }
       )
 
-    # 2. Create the event using the creator's actual database table id
+    # 2. Safely parse the datetime string (handles standard ISO and 'Z' timezone tags)
+    clean_date_str = date.replace("Z", "+00:00")
+    try:
+      parsed_date = datetime.fromisoformat(clean_date_str)
+    except ValueError:
+      # Fallback if the string format is unexpected
+      parsed_date = datetime.now()
+
+    # 3. Create the event using the parsed datetime and creator ID
     event = await prisma.event.create(
         data={
             "title": title,
             "description": description,
-            "date": date,
+            "date": parsed_date,
             "price": float(price),
             "imageUrl": image_url,
             "creatorId": db_creator.id,
@@ -394,5 +402,6 @@ async def create_event(
 
     return {"success": True, "event": event}
   except Exception as e:
-    print(f"Error creating event: {str(e)}")
+    import traceback
+    print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
