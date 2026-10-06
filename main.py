@@ -243,6 +243,7 @@ async def create_ticket_order(order_data: dict):
         created_tickets = []
 
        # Loop through each attendee and create their specific ticket
+        # Loop through each attendee and create their specific ticket
         for attendee in attendees:
             ticket = await prisma.ticket.create(
                 data={
@@ -250,8 +251,7 @@ async def create_ticket_order(order_data: dict):
                     "buyerEmail": attendee.get("buyerEmail"),
                     "buyerPhone": attendee.get("buyerPhone"),
                     "status": "paid",
-                    "eventId": event_id, # <--- Add explicit string ID here!
-                    "event": {"connect": {"id": event_id}},
+                    "event": {"connect": {"id": event_id}}, # <--- Keep only this connection relation
                 }
             )
             created_tickets.append(ticket.id)
@@ -281,6 +281,18 @@ async def create_ticket_order(order_data: dict):
      import traceback
     print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/events/{event_id}/tickets")
+async def get_event_tickets(event_id: str):
+    try:
+        tickets = await prisma.ticket.find_many(
+            where={"eventId": event_id},
+            order={"createdAt": "desc"}
+        )
+        return tickets
+    except Exception as e:
+        print(f"Error fetching event tickets: {e}")
+        return []
   
 def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticket_id: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
