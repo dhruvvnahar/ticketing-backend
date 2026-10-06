@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prisma import Prisma
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 
 prisma = Prisma()
@@ -41,6 +41,15 @@ cloudinary.config(
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
 )
+
+class Attendee(BaseModel):
+    buyerName: str
+    buyerEmail: str
+    buyerPhone: str
+
+class TicketOrderRequest(BaseModel):
+    eventId: str
+    attendees: List[Attendee]
 
 @app.get("/api/seed-creator")
 async def seed_creator():
@@ -196,43 +205,64 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(order_data: dict):
-  try:
-    buyer_name = order_data.get("buyerName") or order_data.get("buyer_name")
-    buyer_email = order_data.get("buyerEmail") or order_data.get("buyer_email")
-    buyer_phone = order_data.get("buyerPhone") or order_data.get("buyer_phone")
-    event_id = order_data.get("eventId") or order_data.get("event_id")
-
-    if not event_id:
-      raise HTTPException(status_code=400, detail="Event ID is required")
-
-    # Fetch event details first to get the event title for the email
-    event = await prisma.event.find_unique(where={"id": event_id})
-    event_title = event.title if event else "Event"
-
-    ticket = await prisma.ticket.create(
-        data={
-            "buyerName": buyer_name,
-            "buyerEmail": buyer_email,
-            "buyerPhone": buyer_phone,
-            "status": "paid", # Mark as paid directly for testing
-            "event": {"connect": {"id": event_id}},
-        }
-    )
-
-    # Trigger email directly here!
     try:
-        send_ticket_email(
-            buyer_email=buyer_email,
-            buyer_name=buyer_name,
-            event_title=event_title,
-            ticket_id=ticket.id
-        )
-    except Exception as email_err:
-        print(f"Email failed: {email_err}")
+        event_id = order_data.get("eventId") or order_data.get("event_id")
 
-    return {"success": True, "ticketId": ticket.id}
-  except Exception as e:
-    import traceback
+        if not event_id:
+            raise HTTPException(status_code=400, detail="Event ID is required")
+
+        # Fetch event details first to get the event title for the email
+        event = await prisma.event.find_unique(where={"id": event_id})
+        event_title = event.title if event else "Event"
+
+        # Check if we received a list of attendees (new multi-ticket flow) 
+        # or single buyer details (old flow fallback)
+        attendees = order_data.get("attendees")
+        
+        if not attendees:
+            buyer_name = order_data.get("buyerName") or order_data.get("buyer_name")
+            buyer_email = order_data.get("buyerEmail") or order_data.get("buyer_email")
+            buyer_phone = order_data.get("buyerPhone") or order_data.get("buyer_phone")
+            attendees = [{"buyerName": buyer_name, "buyerEmail": buyer_email, "buyerPhone": buyer_phone}]
+
+        created_tickets = []
+
+        # Loop through each attendee and create their specific ticket
+        for attendee in attendees:
+            ticket = await prisma.ticket.create(
+                data={
+                    "buyerName": attendee.get("buyerName"),
+                    "buyerEmail": attendee.get("buyerEmail"),
+                    "buyerPhone": attendee.get("buyerPhone"),
+                    "status": "paid", # Mark as paid directly for testing
+                    "event": {"connect": {"id": event_id}},
+                }
+            )
+            created_tickets.append(ticket.id)
+
+            # Trigger email directly for this specific individual!
+            try:
+                send_ticket_email(
+                    buyer_email=attendee.get("buyerEmail"),
+                    buyer_name=attendee.get("buyerName"),
+                    event_title=event_title,
+                    ticket_id=ticket.id
+                )
+            except Exception as email_err:
+                print(f"Email failed for {attendee.get('buyerEmail')}: {email_err}")
+
+        return {
+            "success": True, 
+            "message": f"Successfully created {len(created_tickets)} tickets",
+            "tickets": created_tickets
+        }
+
+    except Exception as e:
+        print(f"Checkout error: {e}")
+        return {"success": False, "message": str(e)}
+
+    except Exception as e:
+     import traceback
     print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
   
