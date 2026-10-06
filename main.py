@@ -8,6 +8,9 @@ import cloudinary.uploader
 import traceback
 import base64
 import shutil
+import csv
+import io
+from fastapi import Response
 from fastapi import UploadFile, File, Form 
 from fastapi.staticfiles import StaticFiles
 from fastapi import Query
@@ -581,4 +584,51 @@ async def delete_event(event_id: str, clerk_id: str = Query(...)):
         return {"success": True}
     except Exception as e:
         print(f"Error deleting event: {e}")
+        return {"success": False, "message": str(e)}    
+
+
+@app.get("/api/events/{event_id}/attendees/csv")
+async def export_attendees_csv(event_id: str, clerk_id: str = Query(...)):
+    try:
+        # Verify creator
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+        if not creator:
+            return {"success": False, "message": "Unauthorized"}
+            
+        event = await prisma.event.find_unique(where={"id": event_id})
+        if not event or event.creatorId != creator.id:
+            return {"success": False, "message": "Event not found or unauthorized"}
+
+        # Fetch all tickets for this event
+        tickets = await prisma.ticket.find_many(
+            where={"eventId": event_id},
+            order={"createdAt": "desc"}
+        )
+
+        # Generate CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write headers
+        writer.writerow(["Ticket ID", "Buyer Name", "Buyer Email", "Buyer Phone", "Status", "Purchased At"])
+        
+        # Write data rows
+        for t in tickets:
+            writer.writerow([
+                t.id,
+                t.buyerName,
+                t.buyerEmail,
+                t.buyerPhone,
+                t.status,
+                t.createdAt.strftime("%Y-%m-%d %H:%M") if t.createdAt else "N/A"
+            ])
+
+        # Return as a downloadable file
+        response = Response(content=output.getvalue(), media_type="text/csv")
+        clean_title = "".join(c if c.isalnum() else "_" for c in event.title)
+        response.headers["Content-Disposition"] = f"attachment; filename={clean_title}_attendees.csv"
+        
+        return response
+    except Exception as e:
+        print(f"Error generating CSV: {e}")
         return {"success": False, "message": str(e)}    
