@@ -481,33 +481,25 @@ async def create_event(
     raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/events")
-async def get_events(clerk_id: Optional[str] = None):
-  try:
-    # If a clerk_id is provided, only return events for that specific creator
-    if clerk_id:
-        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
-        if not creator:
-            return []
-        
-        events = await prisma.event.find_many(
-            where={"creatorId": creator.id},
-            include={"creator": True}
-        )
-        return events
-
-    # Otherwise, return all events (for the public storefront)
-    events = await prisma.event.find_many(include={"creator": True})
-    return events
-  except Exception as e:
-    import traceback
-    print(traceback.format_exc())
-    # Fallback
+async def get_events():
     try:
-      events = await prisma.event.find_many()
-      return events
-    except Exception as inner_e:
-      raise HTTPException(status_code=500, detail=str(inner_e))
-
+        events = await prisma.event.find_many(
+            order={"createdAt": "desc"}
+        )
+        
+        # Add ticketsSold count to every event
+        event_list = []
+        for event in events:
+            sold_count = await prisma.ticket.count(where={"eventId": event.id})
+            event_dict = event.model_dump()
+            event_dict["ticketsSold"] = sold_count
+            event_list.append(event_dict)
+            
+        return event_list
+    except Exception as e:
+        print(f"Error fetching events: {e}")
+        return {"error": str(e)}
+    
 @app.get("/api/analytics")
 async def get_analytics(clerk_id: str):
     try:
