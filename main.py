@@ -473,21 +473,21 @@ async def get_events(clerk_id: Optional[str] = None):
 @app.get("/api/analytics")
 async def get_analytics(clerk_id: str):
     try:
-        # Find the creator by their Clerk ID
-        creator = await db.creator.find_unique(where={"clerkId": clerk_id})
+        # Changed 'db' to 'prisma'
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
         
         if not creator:
             return {"totalRevenue": 0, "ticketsSold": 0}
 
-        # Fetch all events belonging to this creator
-        events = await db.event.find_many(where={"creatorId": creator.id})
+        # Changed 'db' to 'prisma'
+        events = await prisma.event.find_many(where={"creatorId": creator.id})
         
         total_revenue = 0
         tickets_sold = 0
 
-        # Tally up tickets and revenue
         for event in events:
-            tickets = await db.ticket.find_many(where={"eventId": event.id})
+            # Changed 'db' to 'prisma'
+            tickets = await prisma.ticket.find_many(where={"eventId": event.id})
             tickets_sold += len(tickets)
             total_revenue += (len(tickets) * event.price)
 
@@ -497,5 +497,4 @@ async def get_analytics(clerk_id: str):
         }
     except Exception as e:
         print(f"Analytics error: {e}")
-        # Failsafe return if there are no events or tickets yet
         return {"totalRevenue": 0, "ticketsSold": 0}
