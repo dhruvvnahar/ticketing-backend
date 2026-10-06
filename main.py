@@ -91,13 +91,6 @@ async def seed_creator():
         print(traceback.format_exc())
         return {"error": str(e)}
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Or specify ["http://localhost:3000"]
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.on_event("startup")
 async def startup():
@@ -211,19 +204,27 @@ async def create_ticket_order(order_data: dict):
         if not event_id:
             raise HTTPException(status_code=400, detail="Event ID is required")
 
-        # Fetch event details first to get the event title for the email
+       # ... inside create_ticket_order ...
         event = await prisma.event.find_unique(where={"id": event_id})
         event_title = event.title if event else "Event"
 
-        # Check if we received a list of attendees (new multi-ticket flow) 
-        # or single buyer details (old flow fallback)
+        # --- NEW CAPACITY CHECK ---
+        sold_tickets = await prisma.ticket.count(where={"eventId": event_id})
+        available_tickets = event.capacity - sold_tickets
+
         attendees = order_data.get("attendees")
-        
         if not attendees:
             buyer_name = order_data.get("buyerName") or order_data.get("buyer_name")
             buyer_email = order_data.get("buyerEmail") or order_data.get("buyer_email")
             buyer_phone = order_data.get("buyerPhone") or order_data.get("buyer_phone")
             attendees = [{"buyerName": buyer_name, "buyerEmail": buyer_email, "buyerPhone": buyer_phone}]
+
+        if len(attendees) > available_tickets:
+            return {
+                "success": False, 
+                "message": f"Sold out! Only {available_tickets} ticket(s) remaining."
+            }
+        # --------------------------
 
         created_tickets = []
 
@@ -355,17 +356,23 @@ async def get_ticket(ticket_id: str):
         "qr_code_image": f"data:image/png;base64,{qr_base64}"
     }
 
-@app.get("/api/events/{event_id}/tickets")
-async def get_event_tickets(event_id: str):
+@app.get("/api/events/{event_id}")
+async def get_event(event_id: str):
     try:
-        tickets = await prisma.ticket.find_many(
-            where={"eventId": event_id}
-        )
-        return tickets
+        event = await prisma.event.find_unique(where={"id": event_id})
+        if not event:
+            return {"error": "Event not found"}
+        
+        # Count how many tickets already exist for this event
+        sold_tickets = await prisma.ticket.count(where={"eventId": event_id})
+        
+        # Convert to dictionary and inject the sold count
+        event_dict = event.model_dump()
+        event_dict["ticketsSold"] = sold_tickets
+        return event_dict
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching event: {e}")
+        return {"error": str(e)}
 
 @app.get("/api/creators/{username}")
 async def get_creator_profile(username: str):
@@ -423,6 +430,7 @@ async def create_event(
     date: str = Form(...),
     price: float = Form(...),
     clerk_id: str = Form(...),
+    totalSeats: int = Form(100), # <-- 1. Added as a Form parameter
     file: UploadFile = File(None),
 ):
   try:
@@ -462,6 +470,7 @@ async def create_event(
             "price": float(price),
             "imageUrl": image_url,
             "creatorId": db_creator.id,
+            "capacity": totalSeats, # <-- 2. Use the variable directly here
         }
     )
 
@@ -470,7 +479,6 @@ async def create_event(
     import traceback
     print(traceback.format_exc())
     raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/events")
 async def get_events(clerk_id: Optional[str] = None):

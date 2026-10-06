@@ -31,6 +31,7 @@ model Event {
   creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   tickets     Ticket[]
   createdAt   DateTime @default(now())
+  capacity  Int  @default(100)
 }
 
 
