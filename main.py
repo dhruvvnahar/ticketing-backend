@@ -431,15 +431,27 @@ async def create_event(
 
 
 @app.get("/api/events")
-async def get_events():
+async def get_events(clerk_id: Optional[str] = None):
   try:
-    # Try fetching events with the creator relation
+    # If a clerk_id is provided, only return events for that specific creator
+    if clerk_id:
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+        if not creator:
+            return []
+        
+        events = await prisma.event.find_many(
+            where={"creatorId": creator.id},
+            include={"creator": True}
+        )
+        return events
+
+    # Otherwise, return all events (for the public storefront)
     events = await prisma.event.find_many(include={"creator": True})
     return events
   except Exception as e:
     import traceback
     print(traceback.format_exc())
-    # Fallback to fetching events alone if relation mapping fails
+    # Fallback
     try:
       events = await prisma.event.find_many()
       return events
