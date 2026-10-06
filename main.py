@@ -207,10 +207,20 @@ async def create_ticket_order(order_data: dict):
 
        # ... inside create_ticket_order ...
         event = await prisma.event.find_unique(where={"id": event_id})
-        event_title = event.title if event else "Event"
+        if not event:
+            return {"success": False, "message": "Event not found"}
 
-        # --- NEW CAPACITY CHECK ---
+        # --- NEW PAUSE CHECK ---
+        if event.isActive == False:
+            return {
+                "success": False, 
+                "message": "Sales for this event are currently paused."
+            }
+        # -----------------------
+
+        # --- EXISTING CAPACITY CHECK ---
         sold_tickets = await prisma.ticket.count(where={"eventId": event_id})
+        # ...
         available_tickets = event.capacity - sold_tickets
 
         attendees = order_data.get("attendees")
