@@ -325,6 +325,18 @@ async def get_ticket(ticket_id: str):
         "qr_code_image": f"data:image/png;base64,{qr_base64}"
     }
 
+@app.get("/api/events/{event_id}/tickets")
+async def get_event_tickets(event_id: str):
+    try:
+        tickets = await prisma.ticket.find_many(
+            where={"eventId": event_id}
+        )
+        return tickets
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/creators/{username}")
 async def get_creator_profile(username: str):
     try:
