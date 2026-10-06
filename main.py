@@ -10,6 +10,7 @@ import base64
 import shutil
 from fastapi import UploadFile, File, Form 
 from fastapi.staticfiles import StaticFiles
+from fastapi import Query
 from io import BytesIO
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
@@ -528,3 +529,46 @@ async def get_analytics(clerk_id: str):
     except Exception as e:
         print(f"Analytics error: {e}")
         return {"totalRevenue": 0, "ticketsSold": 0}
+
+
+@app.patch("/api/events/{event_id}/toggle")
+async def toggle_event_status(event_id: str, clerk_id: str = Query(...)):
+    try:
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+        if not creator:
+            return {"success": False, "message": "Unauthorized"}
+            
+        event = await prisma.event.find_unique(where={"id": event_id})
+        if not event or event.creatorId != creator.id:
+            return {"success": False, "message": "Event not found or unauthorized"}
+
+        # Flip the current active status
+        updated_event = await prisma.event.update(
+            where={"id": event_id},
+            data={"isActive": not event.isActive}
+        )
+        return {"success": True, "isActive": updated_event.isActive}
+    except Exception as e:
+        print(f"Error toggling event: {e}")
+        return {"success": False, "message": str(e)}
+
+@app.delete("/api/events/{event_id}")
+async def delete_event(event_id: str, clerk_id: str = Query(...)):
+    try:
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+        if not creator:
+            return {"success": False, "message": "Unauthorized"}
+            
+        event = await prisma.event.find_unique(where={"id": event_id})
+        if not event or event.creatorId != creator.id:
+            return {"success": False, "message": "Event not found or unauthorized"}
+
+        # Delete all tickets associated with this event first to avoid database relation errors
+        await prisma.ticket.delete_many(where={"eventId": event_id})
+        # Delete the event itself
+        await prisma.event.delete(where={"id": event_id})
+        
+        return {"success": True}
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        return {"success": False, "message": str(e)}    
