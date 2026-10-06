@@ -242,14 +242,15 @@ async def create_ticket_order(order_data: dict):
 
         created_tickets = []
 
-        # Loop through each attendee and create their specific ticket
+       # Loop through each attendee and create their specific ticket
         for attendee in attendees:
             ticket = await prisma.ticket.create(
                 data={
                     "buyerName": attendee.get("buyerName"),
                     "buyerEmail": attendee.get("buyerEmail"),
                     "buyerPhone": attendee.get("buyerPhone"),
-                    "status": "paid", # Mark as paid directly for testing
+                    "status": "paid",
+                    "eventId": event_id, # <--- Add explicit string ID here!
                     "event": {"connect": {"id": event_id}},
                 }
             )
