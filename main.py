@@ -393,9 +393,11 @@ async def create_event(
     # 1. Find or create the creator record first using clerkId
     db_creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
     if not db_creator:
+      fallback_username = clerk_id.lower()
       db_creator = await prisma.creator.create(
           data={
               "clerkId": clerk_id,
+              "username": fallback_username,
               "email": f"{clerk_id}@clerk.user",
               "name": "Creator",
           }
