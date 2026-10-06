@@ -437,6 +437,51 @@ async def check_in_ticket(ticket_id: str):
         "eventTitle": ticket.event.title
     }
 
+@app.post("/api/verify-ticket")
+async def verify_ticket(
+    ticket_id: str = Form(...),
+    clerk_id: str = Form(...)
+):
+    try:
+        # 1. Verify that the person scanning is a registered creator
+        creator = await prisma.creator.find_unique(where={"clerkId": clerk_id})
+        if not creator:
+            return {"success": False, "message": "Unauthorized: Creator not found"}
+
+        # 2. Find the ticket
+        ticket = await prisma.ticket.find_unique(where={"id": ticket_id})
+        if not ticket:
+            return {"success": False, "message": "Invalid ticket ID"}
+
+        # 3. Find the event associated with this ticket
+        event = await prisma.event.find_unique(where={"id": ticket.eventId})
+        if not event:
+            return {"success": False, "message": "Associated event not found"}
+
+        # 4. CRITICAL SECURITY CHECK: Ensure the creator owns this specific event!
+        if event.creatorId != creator.id:
+            return {"success": False, "message": "Unauthorized: You do not own this event"}
+
+        # 5. Check if already used
+        if ticket.status == "USED":
+            return {"success": False, "message": "Ticket has already been used!"}
+
+        # 6. Mark ticket as used
+        updated_ticket = await prisma.ticket.update(
+            where={"id": ticket_id},
+            data={"status": "USED"}
+        )
+
+        return {
+            "success": True, 
+            "message": "Ticket successfully verified!", 
+            "buyerName": updated_ticket.buyerName,
+            "eventTitle": event.title
+        }
+    except Exception as e:
+        print(f"Error verifying ticket: {e}")
+        return {"success": False, "message": str(e)}
+    
 @app.post("/api/events")
 async def create_event(
     title: str = Form(...),
