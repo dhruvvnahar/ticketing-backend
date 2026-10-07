@@ -261,12 +261,11 @@ async def create_ticket_order(order_data: dict):
                 send_ticket_email(
                     buyer_email=attendee.get("buyerEmail"),
                     buyer_name=attendee.get("buyerName"),
-                    event_title=event_title,
+                    event_title=event.title,  # <--- Changed to event.title
                     ticket_id=ticket.id
                 )
             except Exception as email_err:
                 print(f"Email failed for {attendee.get('buyerEmail')}: {email_err}")
-
         return {
             "success": True, 
             "message": f"Successfully created {len(created_tickets)} tickets",
