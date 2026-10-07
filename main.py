@@ -383,8 +383,8 @@ async def verify_and_fulfill(data: dict):
         raise HTTPException(status_code=400, detail="Order ID required")
     
     try:
-        # Use your actual testing email address directly here so it never fails
-        customer_email = data.get("customer_email") or "your-personal-email@gmail.com"
+        # Force the recipient to your verified Resend account email during sandbox testing
+        customer_email = "dhruvnahar25@gmail.com"
 
         resend.Emails.send({
             "from": "onboarding@resend.dev",
