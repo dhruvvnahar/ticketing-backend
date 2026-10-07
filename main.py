@@ -381,11 +381,23 @@ async def verify_and_fulfill(data: dict):
     order_id = data.get("order_id")
     if not order_id:
         raise HTTPException(status_code=400, detail="Order ID required")
-        
-    # Optional: Call Cashfree API to verify order is PAID
-    # Then create ticket and send email via Resend
-    return {"success": True}
-
+    
+    try:
+        # 1. Create ticket records in Prisma database
+        # 2. Generate QR code using qrcode & pillow
+        # 3. Send email via Resend API
+        resend.Emails.send({
+            "from": "onboarding@resend.dev",
+            "to": "YOUR_EMAIL_HERE", # or fetch from order details
+            "subject": "Your Event Ticket Pass",
+            "html": "<p>Here is your ticket QR code!</p>"
+        })
+        print("SUCCESS: Email sent via Resend API!")
+        return {"success": True}
+    except Exception as e:
+        print(f"Error in fulfillment: {str(e)}")
+        return {"success": False, "message": str(e)}
+    
 @app.post("/api/webhook")
 async def simulated_webhook(request: Request):
     payload = await request.json()
