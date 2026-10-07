@@ -383,17 +383,35 @@ async def verify_and_fulfill(data: dict):
         raise HTTPException(status_code=400, detail="Order ID required")
     
     try:
-        # Force the recipient to your verified Resend account email during sandbox testing
+        # Force recipient to your verified Resend sandbox email for testing
         customer_email = "dhruvnahar25@gmail.com"
+        
+        # Find a default active event or use the latest event to attach the ticket to
+        event = await prisma.event.find_first(order={"createdAt": "desc"})
+        if not event:
+            return {"success": False, "message": "No active events found for ticket creation"}
 
-        resend.Emails.send({
-            "from": "onboarding@resend.dev",
-            "to": customer_email,
-            "subject": "Your Event Ticket Pass",
-            "html": "<p>Your payment was successful! Here is your ticket entry pass.</p>"
-        })
-        print("SUCCESS: Email sent via Resend API!")
-        return {"success": True}
+        # 1. Create the ticket record in PostgreSQL via Prisma
+        ticket = await prisma.ticket.create(
+            data={
+                "buyerName": "Test Buyer",
+                "buyerEmail": customer_email,
+                "buyerPhone": "9999999999",
+                "status": "paid",
+                "event": {"connect": {"id": event.id}},
+            }
+        )
+
+        # 2. Trigger your existing send_ticket_email function which generates the QR code and attaches it
+        send_ticket_email(
+            buyer_email=customer_email,
+            buyer_name="Test Buyer",
+            event_title=event.title,
+            ticket_id=ticket.id
+        )
+
+        print("SUCCESS: Ticket created and full QR email sent via Resend!")
+        return {"success": True, "ticket_id": ticket.id}
     except Exception as e:
         print(f"Error in fulfillment: {str(e)}")
         return {"success": False, "message": str(e)}
