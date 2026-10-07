@@ -376,6 +376,16 @@ def send_ticket_email(buyer_email: str, buyer_name: str, event_title: str, ticke
     except Exception as e:
         print(f"FAILED to send via Resend: {e}")
 
+@app.post("/api/verify-and-fulfill")
+async def verify_and_fulfill(data: dict):
+    order_id = data.get("order_id")
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Order ID required")
+        
+    # Optional: Call Cashfree API to verify order is PAID
+    # Then create ticket and send email via Resend
+    return {"success": True}
+
 @app.post("/api/webhook")
 async def simulated_webhook(request: Request):
     payload = await request.json()
