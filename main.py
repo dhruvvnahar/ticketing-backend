@@ -232,7 +232,7 @@ async def create_cashfree_order(req: CashfreeOrderRequest):
                 "customer_phone": req.customer_phone
             },
             "order_meta": {
-                # This redirects back to your frontend once payment is done
+                # This ensures Cashfree redirects users back to your success page after payment
                 "return_url": f"https://ticketing-frontend-plum.vercel.app/payment-status?order_id={unique_order_id}"
             }
         }
