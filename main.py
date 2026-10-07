@@ -8,6 +8,7 @@ import cloudinary.uploader
 import traceback
 import base64
 import shutil
+import requests
 import csv
 import io
 from fastapi import Response
@@ -200,6 +201,60 @@ async def upload_image(file: UploadFile = File(...)):
         status_code=500, detail=f"Image upload failed: {str(e)}"
     )
 
+class CashfreeOrderRequest(BaseModel):
+    amount: float
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+
+@app.post("/api/create-cashfree-order")
+async def create_cashfree_order(req: CashfreeOrderRequest):
+    try:
+        url = "https://sandbox.cashfree.com/pg/orders"
+        headers = {
+            "accept": "application/json",
+            "x-api-version": "2023-08-01",
+            "content-type": "application/json",
+            "x-client-id": os.getenv("CASHFREE_APP_ID"),
+            "x-client-secret": os.getenv("CASHFREE_SECRET_KEY")
+        }
+        
+        unique_order_id = f"order_{uuid.uuid4().hex[:12]}"
+        
+        payload = {
+            "order_amount": round(req.amount, 2),
+            "order_currency": "INR",
+            "order_id": unique_order_id,
+            "customer_details": {
+                "customer_id": f"cust_{uuid.uuid4().hex[:8]}",
+                "customer_name": req.customer_name,
+                "customer_email": req.customer_email,
+                "customer_phone": req.customer_phone
+            },
+            "order_meta": {
+                # This redirects back to your frontend once payment is done
+                "return_url": f"https://ticketing-frontend-plum.vercel.app/payment-status?order_id={unique_order_id}"
+            }
+        }
+        
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+
+        if response.status_code == 200:
+            return {
+                "success": True, 
+                "payment_session_id": data.get("payment_session_id"),
+                "order_id": data.get("order_id")
+            }
+        else:
+            print(f"Cashfree Error: {data}")
+            return {"success": False, "message": data.get("message", "Failed to initiate payment")}
+            
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "message": str(e)}
+    
 @app.post("/api/create-ticket-order")
 async def create_ticket_order(order_data: dict):
     try:
