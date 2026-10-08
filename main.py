@@ -35,7 +35,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or specify your Vercel domain
+    allow_origins=origins,  # <--- Change ["*"] to origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
